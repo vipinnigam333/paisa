@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run unit tests
+        run: pytest tests/ -v
+
+      - name: Generate sample data (synthetic, for CI reproducibility)
+        run: python -m src.data_loader --ticker AAPL --force-synthetic
+
+      - name: Train model (smoke test)
+        run: python -m src.train --data data/sample_data/AAPL.csv --n-splits 3
+
+      - name: Backtest (smoke test)
+        run: python -m src.evaluate --data data/sample_data/AAPL.csv --oos-preds models/model_oos_predictions.csv
+
+      - name: Build Docker image
+        run: docker build -t stock-mlops:ci .
+
+  # Separate job: only runs on main, and only if tests pass.
+  # In a real setup this would push the image to a registry (ECR/GCR/Docker Hub)
+  # and trigger a deploy step. Left as a placeholder here since it needs
+  # registry credentials as repo secrets.
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Would push image to registry and deploy here (needs registry secrets)."
